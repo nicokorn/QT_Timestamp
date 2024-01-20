@@ -7,13 +7,15 @@
 #include <QTableWidget>
 #include <QFile>
 #include <QTextStream>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
-#define KOMMEN "Kommen"
-#define GEHEN "Gehen"
+#define KOMMEN "Arrive"
+#define GEHEN "Depart"
+#define FILENAME "time.txt"
 
 class MainWindow : public QMainWindow
 {
@@ -25,13 +27,17 @@ public:
 
 private slots:
     void on_pushButton_released();
+    void UpdateUI();
 
 private:
     int GetWeekDay();
     void SetUI();
+    bool isWorking();
     void SetBtn();
+    void SetUITimer();
     void SetTables();
     double CalcSum(int day);
+    double CalcSumStampedIn();
     void SetSums();
     void MarkColumn();
     void Save(QString date, float sum);
@@ -48,5 +54,7 @@ private:
     std::vector<QDateTime> m_datetimes_fr;
     std::vector<QDateTime> m_datetimes_sa;
     std::vector<QDateTime> m_datetimes_so;
+    QTimer m_timer;
+    int m_counter;
 };
 #endif // MAINWINDOW_H

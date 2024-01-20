@@ -7,6 +7,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    this->setFixedSize(750,550);
+
     m_qtabledays.push_back(ui->tableWidget_Mo);
     m_qtabledays.push_back(ui->tableWidget_Di);
     m_qtabledays.push_back(ui->tableWidget_Mi);
@@ -31,9 +33,19 @@ MainWindow::MainWindow(QWidget *parent)
     m_datetimes.push_back(m_datetimes_sa);
     m_datetimes.push_back(m_datetimes_so);
 
+    for(int day; day<m_qtabledays.size(); day++)
+    {
+        m_qtabledays.at(day)->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        m_qtabledays.at(day)->setFocusPolicy(Qt::NoFocus);
+        m_qtabledays.at(day)->setSelectionMode(QAbstractItemView::NoSelection);
+        m_qtabledays.at(day)->horizontalHeader()->setSectionsClickable(false);
+    }
+
     Load();
 
     SetUI();
+
+    SetUITimer();
 }
 
 MainWindow::~MainWindow()
@@ -64,11 +76,15 @@ void MainWindow::MarkColumn()
     for (int column = 0; column < m_qtabledays.count(); ++column) {
         if(column==day)
         {
-            m_qtabledays.at(column)->setStyleSheet("QHeaderView::section { background-color:grey }");
+            m_qtabledays.at(column)->setStyleSheet("QHeaderView::section { background-color:rgb(153, 204, 255) }");
+            m_timesums.at(column)->setEnabled(true);
+            m_qtabledays.at(column)->setEnabled(true);
         }
         else
         {
             m_qtabledays.at(column)->setStyleSheet("QHeaderView::section { background-color:white }");
+            m_timesums.at(column)->setEnabled(false);
+            m_qtabledays.at(column)->setEnabled(false);
         }
     }
 }
@@ -88,7 +104,7 @@ void MainWindow::SetUI()
     SetBtn();
 }
 
-void MainWindow::SetBtn()
+bool MainWindow::isWorking()
 {
     // get current day for the right column
     int day = GetWeekDay();
@@ -97,12 +113,29 @@ void MainWindow::SetBtn()
     int row = m_qtabledays.at(day)->rowCount();
     if(row%2)
     {
+        return true;
+    }
+    return false;
+}
+
+
+void MainWindow::SetBtn()
+{
+    if(isWorking())
+    {
         ui->pushButton->setText(GEHEN);
     }
     else
     {
         ui->pushButton->setText(KOMMEN);
     }
+}
+
+void MainWindow::SetUITimer()
+{
+    // connect timer signal slot
+    connect(&m_timer, SIGNAL(timeout()), this, SLOT(UpdateUI()));
+    m_timer.start(1000);
 }
 
 void MainWindow::SetTables()
@@ -142,11 +175,11 @@ void MainWindow::SetTables()
 void MainWindow::Save(QString date, float sum)
 {
     // open the file which stores the times
-    QFile file("time.txt");
+    QFile file(FILENAME);
     if(file.open(QIODevice::ReadOnly))
     {
         QTextStream in(&file);
-        QString line;
+        QString line = "";
         QStringList copy;
 
 
@@ -158,37 +191,62 @@ void MainWindow::Save(QString date, float sum)
         }
         file.close();
 
-        // check if date is already there
-        QStringList fields = line.split(",");
-
-        if(!fields[0].compare(date))
+        // if the file has already lines
+        if (line.compare(""))
         {
-            if(file.open(QIODevice::WriteOnly | QIODevice::Text))
-            {
-                for(int linenr=0; linenr<copy.size()-1; linenr++)
-                {
-                    file.write(copy[linenr].toUtf8() + "\n");
-                }
-                QString entry = date+","+QString::number(sum, 'f', 2);
+            QStringList fields = line.split(",");
 
-                int day = GetWeekDay();
-                for(int rownr=0; rownr<m_qtabledays.at(day)->rowCount(); rownr++)
+            // if dates on line is identical with the date to be stored
+            if(!fields[0].compare(date))
+            {
+                if(file.open(QIODevice::WriteOnly | QIODevice::Text))
                 {
-                    QString row = m_qtabledays.at(day)->item(rownr,0)->text();
+                    // overwrite file with the file copy, execpt for the last line
+                    for(int linenr=0; linenr<copy.size()-1; linenr++)
+                    {
+                        file.write(copy[linenr].toUtf8() + "\n");
+                    }
+
+                    // last line is mutated / added with new time stamp
+                    QString entry = date+","+QString::number(sum, 'f', 2);
+
+                    int day = GetWeekDay();
+                    for(int rownr=0; rownr<m_qtabledays.at(day)->rowCount(); rownr++)
+                    {
+                        QString row = m_qtabledays.at(day)->item(rownr,0)->text();
+                        QStringList fields = row.split(", ");
+                        entry += ","+fields[1];
+                    }
+
+                    file.write(entry.toUtf8() + "\n");
+                    file.close();
+                }
+            }
+            // if not append a new line with new date
+            else
+            {
+                if(file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+                {
+                    QTextStream out(&file);
+                    QString entry = date+","+QString::number(sum, 'f', 2);
+                    QString row = m_qtabledays.at(GetWeekDay())->item(0,0)->text();
                     QStringList fields = row.split(", ");
                     entry += ","+fields[1];
+                    file.write(entry.toUtf8() + "\n");
+                    file.close();
                 }
-
-                file.write(entry.toUtf8() + "\n");
-                file.close();
             }
         }
         else
         {
-            if(file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+            if(file.open(QIODevice::WriteOnly | QIODevice::Text))
             {
                 QTextStream out(&file);
-                out << date << "," << sum << " h\n";
+                QString entry = date+","+QString::number(sum, 'f', 2);
+                QString row = m_qtabledays.at(GetWeekDay())->item(0,0)->text();
+                QStringList fields = row.split(", ");
+                entry += ","+fields[1];
+                file.write(entry.toUtf8() + "\n");
                 file.close();
             }
         }
@@ -208,8 +266,8 @@ void MainWindow::Load()
     day--;
 
     // open the file which stores the times
-    QFile file("time.txt");
-    if(file.open(QIODevice::ReadOnly))
+    QFile file(FILENAME);
+    if(file.open(QIODevice::ReadWrite | QIODevice::Text))
     {
         QTextStream in(&file);
         QStringList copy;
@@ -274,17 +332,53 @@ double MainWindow::CalcSum(int day)
     return sum;
 }
 
+double MainWindow::CalcSumStampedIn()
+{
+    double sum = 0;
+    int day = GetWeekDay();
+
+    for(int row=1; row<m_datetimes.at(day).size(); row+=2)
+    {
+        sum += m_datetimes.at(day).at(row-1).secsTo(m_datetimes.at(day).at(row));
+    }
+
+    // if timestamp number is uneven the use is stamped in
+    if(m_datetimes.at(day).size()%2)
+    {
+        // get current time
+        QDateTime now = QDateTime::currentDateTime();
+        sum += m_datetimes.at(day).at(m_datetimes.at(day).size()-1).secsTo(now);
+    }
+
+    // show calculated time on ui
+    if(sum)
+    {
+        sum /= 3600;
+    }
+
+    return sum;
+}
+
+
 void MainWindow::SetSums()
 {
     double sum;
+    int currentDay;
+    QDateTime now = QDateTime::currentDateTime();
+    currentDay = now.date().dayOfWeek();
+    currentDay--;
 
     for(int day=0; day<7; day++)
     {
-        sum = CalcSum(day);
-        if(sum)
+        if(currentDay==day)
         {
-            m_timesums.at(day)->setText(QString::number(sum, 'f', 2) + " h");
+            sum = CalcSumStampedIn();
         }
+        else
+        {
+            sum = CalcSum(day);
+        }
+        m_timesums.at(day)->setText(QString::number(sum, 'f', 2) + " h");
     }
 }
 
@@ -296,7 +390,10 @@ void MainWindow::on_pushButton_released()
     day = now.date().dayOfWeek();
     day--;
 
-    // store time for calculations
+    // reset counter
+    m_counter = 0;
+
+    // store time
     m_datetimes.at(day).push_back(now);
 
     // calculate and set sum for current day
@@ -316,3 +413,7 @@ void MainWindow::on_pushButton_released()
     Save(now.toString("yyyy-MM-dd"), sum);
 }
 
+void MainWindow::UpdateUI()
+{
+    SetUI();
+}
